@@ -1,20 +1,4 @@
 {
-  "services": {
-    "frontend": {
-      "root": ".",
-      "framework": "create-react-app"
-    },
-    "backend": {
-      "root": "backend",
-      "framework": "python"
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/main"
-    }
-  ],
   "build": {
     "env": {
       "CI": "false"
