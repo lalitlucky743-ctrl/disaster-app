@@ -110,10 +110,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000", 
-        "http://127.0.0.1:3000",
-        "http://localhost:3002",   # <--- YE ADD KIYA
-        "http://127.0.0.1:3002"    # <--- YE ADD KIYA
+        "https://disaster-app-30ll.onrender.com"   # <--- YE ADD KIYA
     ],
     allow_credentials=True,
     allow_methods=["*"],
