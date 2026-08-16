@@ -14,5 +14,10 @@
       "source": "/api/(.*)",
       "destination": "/api/main"
     }
-  ]
+  ],
+  "build": {
+    "env": {
+      "CI": "false"
+    }
+  }
 }
