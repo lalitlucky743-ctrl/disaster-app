@@ -17,10 +17,14 @@ const Login = ({ onSwitch }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (loading) return;
+
     setError('');
 
-    // Basic validation
-    if (!username.trim()) {
+    const cleanUsername = username.trim();
+
+    // Validation
+    if (!cleanUsername) {
       setError('Please enter your username.');
       return;
     }
@@ -34,27 +38,30 @@ const Login = ({ onSwitch }) => {
       setLoading(true);
 
       await login(
-        username.trim(),
+        cleanUsername,
         password
       );
 
       console.log(
-        '✅ Login successful, token set!'
+        '✅ Login successful.'
       );
+
+      // AuthContext automatically:
+      // - saves token
+      // - sets user
+      // - loads profile
+      // - Dashboard opens through App.jsx
 
     } catch (err) {
       console.error(
-        'Login failed:',
+        '❌ Login failed:',
         err
       );
 
-      const message =
-        err.response?.data?.detail ||
-        err.response?.data?.message ||
-        'Invalid username or password.';
-
-      setError(message);
-
+      setError(
+        err?.message ||
+        'Invalid username or password.'
+      );
     } finally {
       setLoading(false);
     }
@@ -67,149 +74,230 @@ const Login = ({ onSwitch }) => {
   return (
     <div
       style={{
-        padding: '40px',
-        maxWidth: '400px',
-        margin: '100px auto',
-        background: '#0d1424',
-        border: '1px solid #334155',
-        borderRadius: '8px',
-        textAlign: 'center',
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
         boxSizing: 'border-box',
+        background: '#020617',
       }}
     >
-      {/* ====================================================
-          TITLE
-      ==================================================== */}
-
-      <h2
-        style={{
-          color: '#fff',
-          marginBottom: '20px',
-        }}
-      >
-        Login
-      </h2>
-
-      {/* ====================================================
-          LOGIN FORM
-      ==================================================== */}
-
-      <form onSubmit={handleSubmit}>
-        {/* Username */}
-
-        <input
-          type="text"
-          placeholder="Username"
-          value={username}
-          onChange={(e) => {
-            setUsername(e.target.value);
-            setError('');
-          }}
-          autoComplete="username"
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '8px',
-            margin: '8px 0',
-            background: '#1e293b',
-            border: '1px solid #334155',
-            color: '#fff',
-            borderRadius: '4px',
-            boxSizing: 'border-box',
-          }}
-        />
-
-        {/* Password */}
-
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => {
-            setPassword(e.target.value);
-            setError('');
-          }}
-          autoComplete="current-password"
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '8px',
-            margin: '8px 0',
-            background: '#1e293b',
-            border: '1px solid #334155',
-            color: '#fff',
-            borderRadius: '4px',
-            boxSizing: 'border-box',
-          }}
-        />
-
-        {/* Error */}
-
-        {error && (
-          <div
-            style={{
-              color: '#f87171',
-              fontSize: '12px',
-              margin: '8px 0',
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {/* Login Button */}
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '10px',
-            marginTop: '8px',
-            background: loading
-              ? '#475569'
-              : '#3b82f6',
-            border: 'none',
-            color: '#fff',
-            fontWeight: 'bold',
-            cursor: loading
-              ? 'not-allowed'
-              : 'pointer',
-            borderRadius: '4px',
-          }}
-        >
-          {loading
-            ? 'Logging in...'
-            : 'Login'}
-        </button>
-      </form>
-
-      {/* ====================================================
-          REGISTER
-      ==================================================== */}
-
       <div
         style={{
-          marginTop: '16px',
-          color: '#94a3b8',
-          fontSize: '12px',
+          width: '100%',
+          maxWidth: '400px',
+          padding: '32px',
+          background: '#0d1424',
+          border: '1px solid #334155',
+          borderRadius: '10px',
+          boxSizing: 'border-box',
+          boxShadow:
+            '0 20px 50px rgba(0,0,0,0.35)',
         }}
       >
-        Don't have an account?{' '}
 
-        <span
-          onClick={
-            loading ? undefined : onSwitch
-          }
+        {/* ====================================================
+            TITLE
+        ==================================================== */}
+
+        <div
           style={{
-            color: '#3b82f6',
-            cursor: loading
-              ? 'not-allowed'
-              : 'pointer',
+            textAlign: 'center',
+            marginBottom: '24px',
           }}
         >
-          Register
-        </span>
+          <h2
+            style={{
+              color: '#fff',
+              margin: 0,
+              fontSize: '24px',
+            }}
+          >
+            Disaster Relief System
+          </h2>
+
+          <div
+            style={{
+              marginTop: '7px',
+              color: '#94a3b8',
+              fontSize: '12px',
+            }}
+          >
+            Emergency Operations Login
+          </div>
+        </div>
+
+        {/* ====================================================
+            FORM
+        ==================================================== */}
+
+        <form onSubmit={handleSubmit}>
+
+          {/* USERNAME */}
+
+          <label
+            style={{
+              display: 'block',
+              color: '#cbd5e1',
+              fontSize: '12px',
+              marginBottom: '5px',
+            }}
+          >
+            Username
+          </label>
+
+          <input
+            type="text"
+            placeholder="Enter username"
+            value={username}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              setError('');
+            }}
+            autoComplete="username"
+            disabled={loading}
+            autoFocus
+            style={{
+              width: '100%',
+              padding: '10px',
+              marginBottom: '14px',
+              background: '#1e293b',
+              border: '1px solid #334155',
+              color: '#fff',
+              borderRadius: '5px',
+              boxSizing: 'border-box',
+              outline: 'none',
+            }}
+          />
+
+          {/* PASSWORD */}
+
+          <label
+            style={{
+              display: 'block',
+              color: '#cbd5e1',
+              fontSize: '12px',
+              marginBottom: '5px',
+            }}
+          >
+            Password
+          </label>
+
+          <input
+            type="password"
+            placeholder="Enter password"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setError('');
+            }}
+            autoComplete="current-password"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '10px',
+              marginBottom: '10px',
+              background: '#1e293b',
+              border: '1px solid #334155',
+              color: '#fff',
+              borderRadius: '5px',
+              boxSizing: 'border-box',
+              outline: 'none',
+            }}
+          />
+
+          {/* ERROR */}
+
+          {error && (
+            <div
+              role="alert"
+              style={{
+                marginTop: '8px',
+                marginBottom: '10px',
+                padding: '8px',
+                background:
+                  'rgba(127,29,29,0.25)',
+                border:
+                  '1px solid rgba(248,113,113,0.25)',
+                borderRadius: '5px',
+                color: '#f87171',
+                fontSize: '12px',
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          {/* LOGIN BUTTON */}
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '11px',
+              marginTop: '6px',
+              background: loading
+                ? '#475569'
+                : '#3b82f6',
+              border: 'none',
+              color: '#fff',
+              fontWeight: 'bold',
+              cursor: loading
+                ? 'not-allowed'
+                : 'pointer',
+              borderRadius: '5px',
+            }}
+          >
+            {loading
+              ? 'Authenticating...'
+              : 'Login'}
+          </button>
+
+        </form>
+
+        {/* ====================================================
+            REGISTER
+        ==================================================== */}
+
+        <div
+          style={{
+            marginTop: '18px',
+            paddingTop: '16px',
+            borderTop:
+              '1px solid #1e293b',
+            textAlign: 'center',
+            color: '#94a3b8',
+            fontSize: '12px',
+          }}
+        >
+          Don't have an account?{' '}
+
+          <button
+            type="button"
+            onClick={
+              loading
+                ? undefined
+                : onSwitch
+            }
+            disabled={loading}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              color: '#60a5fa',
+              cursor: loading
+                ? 'not-allowed'
+                : 'pointer',
+              fontSize: '12px',
+              fontWeight: 'bold',
+            }}
+          >
+            Register
+          </button>
+        </div>
+
       </div>
     </div>
   );

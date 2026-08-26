@@ -1,18 +1,56 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const Header = ({
   onRefresh,
   onOperationCenter,
   onSettingsToggle,
   onAvatarToggle,
+  lastUpdated,
 }) => {
+  const [refreshing, setRefreshing] = useState(false);
+
+  // ==========================================================
+  // LIVE REFRESH
+  // ==========================================================
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+
+    try {
+      setRefreshing(true);
+
+      if (typeof onRefresh === 'function') {
+        await onRefresh();
+      }
+
+    } catch (error) {
+      console.error(
+        'Dashboard refresh failed:',
+        error
+      );
+
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // ==========================================================
+  // LAST UPDATED TEXT
+  // ==========================================================
+
+  const updatedText = lastUpdated
+    ? new Date(lastUpdated).toLocaleTimeString()
+    : null;
+
   return (
     <header>
+
       {/* ======================================================
           LEFT SIDE
       ====================================================== */}
 
       <div className="header-left">
+
         <div className="logo-badge">
           <svg
             width="14"
@@ -30,6 +68,7 @@ const Header = ({
         </div>
 
         <div>
+
           <div className="header-title">
             GLOBAL DISASTER RELIEF SYSTEM
           </div>
@@ -37,7 +76,9 @@ const Header = ({
           <div className="header-sub">
             3D Interactive Command and Control Dashboard
           </div>
+
         </div>
+
       </div>
 
       {/* ======================================================
@@ -45,9 +86,27 @@ const Header = ({
       ====================================================== */}
 
       <div className="header-right">
+
         <span className="op-center-label">
           Operation Center
         </span>
+
+        {/* ==================================================
+            LAST UPDATED
+        ================================================== */}
+
+        {updatedText && (
+          <span
+            style={{
+              fontSize: '9px',
+              color: '#94a3b8',
+              marginRight: '4px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            LIVE • {updatedText}
+          </span>
+        )}
 
         {/* ==================================================
             REFRESH
@@ -56,9 +115,20 @@ const Header = ({
         <button
           type="button"
           className="icon-btn"
-          onClick={onRefresh}
+          onClick={handleRefresh}
+          disabled={refreshing}
           aria-label="Refresh dashboard"
-          title="Refresh dashboard"
+          title={
+            refreshing
+              ? 'Refreshing live data...'
+              : 'Refresh live dashboard'
+          }
+          style={{
+            opacity: refreshing ? 0.6 : 1,
+            cursor: refreshing
+              ? 'wait'
+              : 'pointer',
+          }}
         >
           <svg
             width="12"
@@ -70,6 +140,11 @@ const Header = ({
             strokeLinecap="round"
             strokeLinejoin="round"
             aria-hidden="true"
+            style={{
+              animation: refreshing
+                ? 'headerRefreshSpin 0.8s linear infinite'
+                : 'none',
+            }}
           >
             <path d="M4 4v5h.582M20 20v-5h-.581M5.635 8.635A9 9 0 0119.4 15M18.4 15.4A9 9 0 014.6 9" />
           </svg>
@@ -98,7 +173,12 @@ const Header = ({
             aria-hidden="true"
           >
             <path d="M12 2v4M12 22v-4M4 12H2M22 12h-2M19.07 4.93l-2.83 2.83M4.93 19.07l2.83-2.83M19.07 19.07l-2.83-2.83M4.93 4.93l2.83 2.83" />
-            <circle cx="12" cy="12" r="2" />
+
+            <circle
+              cx="12"
+              cy="12"
+              r="2"
+            />
           </svg>
         </button>
 
@@ -124,7 +204,11 @@ const Header = ({
             strokeLinejoin="round"
             aria-hidden="true"
           >
-            <circle cx="12" cy="12" r="3" />
+            <circle
+              cx="12"
+              cy="12"
+              r="3"
+            />
 
             <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
           </svg>
@@ -153,10 +237,31 @@ const Header = ({
             aria-hidden="true"
           >
             <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0z" />
+
             <path d="M12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
         </button>
+
       </div>
+
+      {/* ======================================================
+          REFRESH ANIMATION
+      ====================================================== */}
+
+      <style>
+        {`
+          @keyframes headerRefreshSpin {
+            from {
+              transform: rotate(0deg);
+            }
+
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}
+      </style>
+
     </header>
   );
 };

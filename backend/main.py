@@ -1,11 +1,10 @@
 # ============================================================
 # GLOBAL DISASTER RELIEF SYSTEM
-# FastAPI Backend
+# CLEAN REAL-TIME FASTAPI BACKEND
 # ============================================================
 
 import os
 import math
-import random
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -16,7 +15,6 @@ from fastapi import (
     FastAPI,
     Depends,
     HTTPException,
-    status,
 )
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,13 +24,20 @@ from fastapi.security import (
     OAuth2PasswordRequestForm,
 )
 
-from pydantic import BaseModel, EmailStr
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    ConfigDict,
+)
 
 from sqlalchemy import (
     create_engine,
     Column,
     Integer,
     String,
+    Float,
+    DateTime,
+    func,
 )
 
 from sqlalchemy.exc import IntegrityError
@@ -45,12 +50,12 @@ from sqlalchemy.orm import (
 
 
 # ============================================================
-# CONFIGURATION
+# CONFIG
 # ============================================================
 
 SECRET_KEY = os.getenv(
     "SECRET_KEY",
-    "change-this-secret-key-in-production"
+    "change-this-secret-key-in-production",
 )
 
 ALGORITHM = "HS256"
@@ -64,11 +69,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "sqlite:///./users.db"
+    "sqlite:///./disaster.db",
 )
 
-# Render/Postgres URLs sometimes start with postgres://
-# SQLAlchemy expects postgresql://
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace(
         "postgres://",
@@ -76,14 +79,12 @@ if DATABASE_URL.startswith("postgres://"):
         1,
     )
 
-
 connect_args = {}
 
 if DATABASE_URL.startswith("sqlite"):
     connect_args = {
-        "check_same_thread": False
+        "check_same_thread": False,
     }
-
 
 engine = create_engine(
     DATABASE_URL,
@@ -100,7 +101,7 @@ Base = declarative_base()
 
 
 # ============================================================
-# DATABASE MODEL
+# USER
 # ============================================================
 
 class User(Base):
@@ -133,16 +134,272 @@ class User(Base):
     )
 
 
-Base.metadata.create_all(bind=engine)
+# ============================================================
+# INCIDENT
+# ============================================================
+
+class Incident(Base):
+
+    __tablename__ = "incidents"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    incident_code = Column(
+        String,
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+
+    lat = Column(
+        Float,
+        nullable=False,
+    )
+
+    lng = Column(
+        Float,
+        nullable=False,
+    )
+
+    accuracy = Column(
+        Float,
+        nullable=True,
+    )
+
+    type = Column(
+        String,
+        nullable=False,
+        default="EMERGENCY_SOS",
+    )
+
+    severity = Column(
+        String,
+        nullable=False,
+        default="HIGH",
+    )
+
+    status = Column(
+        String,
+        nullable=False,
+        default="ACTIVE",
+    )
+
+    source = Column(
+        String,
+        nullable=True,
+    )
+
+    location_name = Column(
+        String,
+        nullable=True,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+    )
+
+    dispatched_at = Column(
+        DateTime,
+        nullable=True,
+    )
 
 
 # ============================================================
-# FASTAPI APP
+# RESPONSE TEAM
+# ============================================================
+
+class ResponseTeam(Base):
+
+    __tablename__ = "response_teams"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    team_code = Column(
+        String,
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+
+    name = Column(
+        String,
+        nullable=False,
+    )
+
+    team_type = Column(
+        String,
+        nullable=False,
+    )
+
+    lat = Column(
+        Float,
+        nullable=False,
+    )
+
+    lng = Column(
+        Float,
+        nullable=False,
+    )
+
+    status = Column(
+        String,
+        nullable=False,
+        default="AVAILABLE",
+    )
+
+    incident_id = Column(
+        Integer,
+        nullable=True,
+    )
+
+
+# ============================================================
+# VOLUNTEER
+# ============================================================
+
+class Volunteer(Base):
+
+    __tablename__ = "volunteers"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    volunteer_code = Column(
+        String,
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+
+    name = Column(
+        String,
+        nullable=False,
+    )
+
+    lat = Column(
+        Float,
+        nullable=False,
+    )
+
+    lng = Column(
+        Float,
+        nullable=False,
+    )
+
+    status = Column(
+        String,
+        nullable=False,
+        default="AVAILABLE",
+    )
+
+    incident_id = Column(
+        Integer,
+        nullable=True,
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
+# ============================================================
+# FUNDING TARGET
+#
+# IMPORTANT:
+# This table stores ONLY the campaign target.
+# It does NOT store "raised".
+# ============================================================
+
+class Funding(Base):
+
+    __tablename__ = "funding"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    target = Column(
+        Float,
+        nullable=False,
+        default=0,
+    )
+
+
+# ============================================================
+# REAL DONATION TABLE
+# ============================================================
+
+class Donation(Base):
+
+    __tablename__ = "donations"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    amount = Column(
+        Float,
+        nullable=False,
+    )
+
+    purpose = Column(
+        String,
+        nullable=False,
+        default="Emergency Relief",
+    )
+
+    currency = Column(
+        String,
+        nullable=False,
+        default="INR",
+    )
+
+    status = Column(
+        String,
+        nullable=False,
+        default="SUCCESS",
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+    )
+
+
+# ============================================================
+# CREATE TABLES
+# ============================================================
+
+Base.metadata.create_all(
+    bind=engine,
+)
+
+
+# ============================================================
+# APP
 # ============================================================
 
 app = FastAPI(
     title="Global Disaster Relief System",
-    version="1.0.0",
+    version="3.0.0",
 )
 
 
@@ -150,22 +407,13 @@ app = FastAPI(
 # CORS
 # ============================================================
 
-# IMPORTANT:
-# Frontend is on Vercel.
-# Backend is on Render.
-#
-# We allow:
-# - local Vite development
-# - localhost
-# - Vercel deployments
-#
-# Render URL itself does NOT need to be in allow_origins
-# because the browser origin is the FRONTEND URL.
-
 ALLOWED_ORIGINS = [
-    "http://localhost:5173",
     "http://localhost:3000",
     "http://localhost:3002",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:5176",
 ]
 
 app.add_middleware(
@@ -173,7 +421,6 @@ app.add_middleware(
 
     allow_origins=ALLOWED_ORIGINS,
 
-    # Allows any Vercel *.vercel.app deployment.
     allow_origin_regex=r"https://.*\.vercel\.app",
 
     allow_credentials=True,
@@ -185,17 +432,13 @@ app.add_middleware(
 
 
 # ============================================================
-# OAUTH / JWT
+# AUTH
 # ============================================================
 
 oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/login"
+    tokenUrl="/login",
 )
 
-
-# ============================================================
-# DATABASE DEPENDENCY
-# ============================================================
 
 def get_db():
 
@@ -208,14 +451,20 @@ def get_db():
         db.close()
 
 
-# ============================================================
-# PASSWORD HELPERS
-# ============================================================
+def get_password_hash(
+    password: str,
+):
+
+    return bcrypt.hashpw(
+        password.encode("utf-8"),
+        bcrypt.gensalt(),
+    ).decode("utf-8")
+
 
 def verify_password(
     plain_password: str,
     hashed_password: str,
-) -> bool:
+):
 
     try:
 
@@ -229,50 +478,28 @@ def verify_password(
         return False
 
 
-def get_password_hash(
-    password: str,
-) -> str:
-
-    return bcrypt.hashpw(
-        password.encode("utf-8"),
-        bcrypt.gensalt(),
-    ).decode("utf-8")
-
-
-# ============================================================
-# JWT
-# ============================================================
-
 def create_access_token(
     data: dict,
     expires_delta: Optional[timedelta] = None,
 ):
 
-    to_encode = data.copy()
+    payload = data.copy()
 
     expire = datetime.utcnow() + (
         expires_delta
         or timedelta(
-            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+            minutes=ACCESS_TOKEN_EXPIRE_MINUTES,
         )
     )
 
-    to_encode.update(
-        {
-            "exp": expire
-        }
-    )
+    payload["exp"] = expire
 
     return jwt.encode(
-        to_encode,
+        payload,
         SECRET_KEY,
         algorithm=ALGORITHM,
     )
 
-
-# ============================================================
-# CURRENT USER
-# ============================================================
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -280,11 +507,8 @@ async def get_current_user(
 ):
 
     credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
+        status_code=401,
         detail="Could not validate credentials",
-        headers={
-            "WWW-Authenticate": "Bearer"
-        },
     )
 
     try:
@@ -306,9 +530,7 @@ async def get_current_user(
 
     user = (
         db.query(User)
-        .filter(
-            User.username == username
-        )
+        .filter(User.username == username)
         .first()
     )
 
@@ -336,8 +558,9 @@ class UserOut(BaseModel):
     username: str
     email: EmailStr
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
 
 
 class Token(BaseModel):
@@ -358,167 +581,44 @@ class AIAnalyzeRequest(BaseModel):
 
 class DonationRequest(BaseModel):
 
-    amount: int
-    purpose: Optional[str] = "Medical"
+    amount: float
+    purpose: Optional[str] = "Emergency Relief"
 
 
-class IncidentCreate(BaseModel):
+class SOSRequest(BaseModel):
 
     lat: float
     lng: float
-    type: str = "Earthquake"
+
+    accuracy: Optional[float] = None
+
+    type: str = "EMERGENCY_SOS"
+
+    source: str = "WEB_APP"
+
+    location_name: Optional[str] = None
+
+    timestamp: Optional[str] = None
 
 
-class ParseRequest(BaseModel):
+class DispatchRequest(BaseModel):
 
-    text: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
+    requested_at: Optional[str] = None
 
-# ============================================================
-# DASHBOARD DATA
-# ============================================================
-
-dashboard_stats = {
-
-    "active_alerts": 7,
-
-    "volunteers_deployed": 0,
-
-    "available_volunteers": 3,
-
-    "status": "OPERATIONAL",
-
-    "latency": "<50ms",
-}
+    requested_units: list[str] = []
 
 
-donation_data = {
+class TeamLocationUpdate(BaseModel):
 
-    "raised": 325400,
-
-    "target": 500000,
-}
-
-
-verification_pipeline = [
-
-    {
-        "id": 1,
-        "name": "Incident Received",
-        "status": "Successful",
-    },
-
-    {
-        "id": 2,
-        "name": "Location Verified",
-        "status": "Successful",
-    },
-
-    {
-        "id": 3,
-        "name": "Volunteer Verified",
-        "status": "Successful",
-    },
-
-    {
-        "id": 4,
-        "name": "Medical Unit",
-        "status": "Processing",
-    },
-
-    {
-        "id": 5,
-        "name": "Supplies",
-        "status": "Processing",
-    },
-
-    {
-        "id": 6,
-        "name": "Evac Route",
-        "status": "Pending",
-    },
-]
+    lat: float
+    lng: float
 
 
 # ============================================================
-# INCIDENTS
-# ============================================================
-
-incidents = []
-
-
-# ============================================================
-# VOLUNTEERS
-# ============================================================
-
-volunteers = [
-
-    {
-        "id": "V-741",
-        "name": "Rajesh",
-        "lat": 29.6000,
-        "lng": 79.6600,
-        "status": "AVAILABLE",
-        "dist": 1.2,
-        "eta": 4,
-    },
-
-    {
-        "id": "V-742",
-        "name": "Priya",
-        "lat": 29.5950,
-        "lng": 79.6550,
-        "status": "AVAILABLE",
-        "dist": 0.8,
-        "eta": 2,
-    },
-
-    {
-        "id": "V-743",
-        "name": "Amit",
-        "lat": 29.6020,
-        "lng": 79.6650,
-        "status": "AVAILABLE",
-        "dist": 2.5,
-        "eta": 6,
-    },
-]
-
-
-# ============================================================
-# MEDICAL UNITS
-# ============================================================
-
-medical_units = [
-
-    {
-        "id": "A-12",
-        "lat": 29.5980,
-        "lng": 79.6580,
-        "status": "AVAILABLE",
-    },
-
-]
-
-
-# ============================================================
-# RESCUE TEAMS
-# ============================================================
-
-rescue_teams = [
-
-    {
-        "id": "R-07",
-        "lat": 29.6030,
-        "lng": 79.6620,
-        "status": "AVAILABLE",
-    },
-
-]
-
-
-# ============================================================
-# ROOT / HEALTH CHECK
+# ROOT
 # ============================================================
 
 @app.get("/")
@@ -528,22 +628,25 @@ def root():
         "status": "online",
         "service": "Global Disaster Relief System",
         "backend": "FastAPI",
-        "version": "1.0.0",
+        "version": "3.0.0",
     }
 
+
+# ============================================================
+# HEALTH
+# ============================================================
 
 @app.get("/health")
 def health():
 
     return {
         "status": "healthy",
-        "service": "disaster-relief-api",
         "timestamp": datetime.utcnow().isoformat(),
     }
 
 
 # ============================================================
-# AUTH - REGISTER
+# AUTH REGISTER
 # ============================================================
 
 @app.post(
@@ -561,22 +664,12 @@ def register(
 
     password = user.password.strip()
 
-
     if not username:
 
         raise HTTPException(
             status_code=400,
             detail="Username is required",
         )
-
-
-    if not password:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Password is required",
-        )
-
 
     if len(password) < 6:
 
@@ -585,8 +678,6 @@ def register(
             detail="Password must be at least 6 characters",
         )
 
-
-    # bcrypt limitation
     if len(password.encode("utf-8")) > 72:
 
         raise HTTPException(
@@ -594,12 +685,9 @@ def register(
             detail="Password must be 72 characters or less",
         )
 
-
     existing_username = (
         db.query(User)
-        .filter(
-            User.username == username
-        )
+        .filter(User.username == username)
         .first()
     )
 
@@ -610,12 +698,9 @@ def register(
             detail="Username already exists",
         )
 
-
     existing_email = (
         db.query(User)
-        .filter(
-            User.email == email
-        )
+        .filter(User.email == email)
         .first()
     )
 
@@ -626,21 +711,11 @@ def register(
             detail="Email already exists",
         )
 
-
-    hashed_password = get_password_hash(
-        password
-    )
-
-
     new_user = User(
-
         username=username,
-
         email=email,
-
-        hashed_password=hashed_password,
+        hashed_password=get_password_hash(password),
     )
-
 
     try:
 
@@ -659,12 +734,11 @@ def register(
             detail="Username or email already exists",
         )
 
-
     return new_user
 
 
 # ============================================================
-# AUTH - LOGIN
+# LOGIN
 # ============================================================
 
 @app.post(
@@ -676,19 +750,13 @@ def login(
     db: Session = Depends(get_db),
 ):
 
-    username = form_data.username.strip()
-
-    password = form_data.password.strip()
-
-
     user = (
         db.query(User)
         .filter(
-            User.username == username
+            User.username == form_data.username.strip()
         )
         .first()
     )
-
 
     if not user:
 
@@ -697,9 +765,8 @@ def login(
             detail="Incorrect username or password",
         )
 
-
     if not verify_password(
-        password,
+        form_data.password,
         user.hashed_password,
     ):
 
@@ -708,18 +775,14 @@ def login(
             detail="Incorrect username or password",
         )
 
-
-    access_token = create_access_token(
-        data={
-            "sub": user.username
+    token = create_access_token(
+        {
+            "sub": user.username,
         }
     )
 
-
     return {
-
-        "access_token": access_token,
-
+        "access_token": token,
         "token_type": "bearer",
     }
 
@@ -732,7 +795,7 @@ def login(
     "/profile",
     response_model=UserOut,
 )
-def get_profile(
+def profile(
     current_user: User = Depends(
         get_current_user
     ),
@@ -742,229 +805,896 @@ def get_profile(
 
 
 # ============================================================
-# UPDATE PROFILE
-# ============================================================
-
-@app.put("/profile")
-def update_profile(
-    data: ProfileUpdate,
-    current_user: User = Depends(
-        get_current_user
-    ),
-    db: Session = Depends(get_db),
-):
-
-    new_email = str(
-        data.email
-    ).strip().lower()
-
-
-    existing_email = (
-        db.query(User)
-        .filter(
-            User.email == new_email,
-            User.id != current_user.id,
-        )
-        .first()
-    )
-
-
-    if existing_email:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Email already exists",
-        )
-
-
-    current_user.email = new_email
-
-    db.commit()
-
-    db.refresh(current_user)
-
-
-    return {
-
-        "message": "Profile updated successfully",
-
-        "user": {
-
-            "id": current_user.id,
-
-            "username": current_user.username,
-
-            "email": current_user.email,
-        },
-    }
-
-
-# ============================================================
 # STATS
 # ============================================================
 
 @app.get("/stats")
-def get_stats():
+def get_stats(
+    db: Session = Depends(get_db),
+):
 
-    return dashboard_stats
+    active_alerts = (
+        db.query(Incident)
+        .filter(
+            Incident.status == "ACTIVE"
+        )
+        .count()
+    )
 
+    deployed = (
+        db.query(Volunteer)
+        .filter(
+            Volunteer.status == "DEPLOYED"
+        )
+        .count()
+    )
 
-# ============================================================
-# FUNDS
-# ============================================================
-
-@app.get("/funds")
-def get_funds():
-
-    raised = donation_data["raised"]
-
-    target = donation_data["target"]
-
-
-    percentage = int(
-        (raised / target) * 100
-    ) if target > 0 else 0
-
+    available = (
+        db.query(Volunteer)
+        .filter(
+            Volunteer.status == "AVAILABLE"
+        )
+        .count()
+    )
 
     return {
-
-        "raised": raised,
-
-        "target": target,
-
-        "percentage": min(
-            100,
-            percentage,
-        ),
+        "active_alerts": active_alerts,
+        "volunteers_deployed": deployed,
+        "available_volunteers": available,
+        "status": "OPERATIONAL",
+        "latency": "<50ms",
+        "server_time": datetime.utcnow().isoformat(),
     }
 
 
 # ============================================================
-# DONATION
+# REAL FUNDING
+#
+# raised = SUM(real successful donations)
+#
+# NO HARDCODED RAISED VALUE
+# ============================================================
+
+@app.get("/funds")
+def get_funds(
+    db: Session = Depends(get_db),
+):
+
+    funding = (
+        db.query(Funding)
+        .order_by(Funding.id.asc())
+        .first()
+    )
+
+    target = (
+        float(funding.target)
+        if funding and funding.target is not None
+        else 0.0
+    )
+
+    total_raised = (
+        db.query(
+            func.coalesce(
+                func.sum(Donation.amount),
+                0,
+            )
+        )
+        .filter(
+            Donation.status == "SUCCESS"
+        )
+        .scalar()
+    )
+
+    raised = float(total_raised or 0)
+
+    donors = (
+        db.query(Donation)
+        .filter(
+            Donation.status == "SUCCESS"
+        )
+        .count()
+    )
+
+    percentage = 0.0
+
+    if target > 0:
+
+        percentage = (
+            raised / target
+        ) * 100
+
+    percentage = min(
+        100,
+        max(
+            0,
+            round(
+                percentage,
+                2,
+            ),
+        ),
+    )
+
+    return {
+        "raised": raised,
+        "target": target,
+        "percentage": percentage,
+        "donors": donors,
+        "currency": "INR",
+        "source": "database",
+        "last_updated": datetime.utcnow().isoformat(),
+    }
+
+
+# ============================================================
+# REAL DONATION
 # ============================================================
 
 @app.post("/webhook/donate")
 def donate(
     data: DonationRequest,
+    db: Session = Depends(get_db),
 ):
 
-    if data.amount < 1:
+    amount = float(data.amount)
+
+    if not math.isfinite(amount):
 
         raise HTTPException(
             status_code=400,
-            detail="Donation amount must be greater than 0",
+            detail="Invalid donation amount",
         )
 
+    if amount <= 0:
 
-    donation_data["raised"] += data.amount
+        raise HTTPException(
+            status_code=400,
+            detail="Donation amount must be greater than zero",
+        )
 
+    purpose = (
+        data.purpose.strip()
+        if data.purpose
+        else "Emergency Relief"
+    )
 
-    return get_funds()
+    if not purpose:
 
+        purpose = "Emergency Relief"
 
-# ============================================================
-# VERIFICATION PIPELINE
-# ============================================================
+    donation = Donation(
+        amount=amount,
+        purpose=purpose,
+        currency="INR",
+        status="SUCCESS",
+        created_at=datetime.utcnow(),
+    )
 
-@app.get("/verifications")
-def get_verifications():
+    db.add(donation)
 
-    return verification_pipeline
+    db.commit()
 
+    db.refresh(donation)
 
-# ============================================================
-# PARSER
-# ============================================================
-
-@app.post("/parse")
-def parse_emergency(
-    data: ParseRequest,
-):
-
-    text = data.text.lower()
-
-
-    if (
-        "collapse" in text
-        or "building" in text
-    ):
-
-        return {
-
-            "disaster_type":
-                "STRUCTURAL COLLAPSE",
-
-            "estimated_victims":
-                "50-100",
-
-            "urgency_level":
-                "CRITICAL",
-        }
-
-
-    if (
-        "flood" in text
-        or "water" in text
-    ):
-
-        return {
-
-            "disaster_type":
-                "FLOOD",
-
-            "estimated_victims":
-                "100-200",
-
-            "urgency_level":
-                "HIGH",
-        }
-
-
-    if "fire" in text:
-
-        return {
-
-            "disaster_type":
-                "FIRE",
-
-            "estimated_victims":
-                "10-30",
-
-            "urgency_level":
-                "HIGH",
-        }
-
-
-    if "earthquake" in text:
-
-        return {
-
-            "disaster_type":
-                "EARTHQUAKE",
-
-            "estimated_victims":
-                "200-500",
-
-            "urgency_level":
-                "CRITICAL",
-        }
-
+    funds = get_funds(db)
 
     return {
-
-        "disaster_type":
-            "UNKNOWN",
-
-        "estimated_victims":
-            "Unknown",
-
-        "urgency_level":
-            "MODERATE",
+        "success": True,
+        "message": "Donation recorded successfully.",
+        "donation": {
+            "id": donation.id,
+            "amount": donation.amount,
+            "purpose": donation.purpose,
+            "currency": donation.currency,
+            "status": donation.status,
+            "created_at": donation.created_at.isoformat(),
+        },
+        "funding": funds,
     }
 
 
 # ============================================================
-# AI DISASTER INTELLIGENCE
+# DONATION HISTORY
+# ============================================================
+
+@app.get("/donations")
+def get_donations(
+    db: Session = Depends(get_db),
+):
+
+    donations = (
+        db.query(Donation)
+        .filter(
+            Donation.status == "SUCCESS"
+        )
+        .order_by(
+            Donation.created_at.desc()
+        )
+        .limit(500)
+        .all()
+    )
+
+    return [
+        {
+            "id": donation.id,
+            "amount": donation.amount,
+            "purpose": donation.purpose,
+            "currency": donation.currency,
+            "status": donation.status,
+            "created_at": (
+                donation.created_at.isoformat()
+                if donation.created_at
+                else None
+            ),
+        }
+        for donation in donations
+    ]
+
+
+# ============================================================
+# INCIDENT SERIALIZER
+# ============================================================
+
+def serialize_incident(
+    incident: Incident,
+):
+
+    return {
+        "id": incident.incident_code,
+        "database_id": incident.id,
+
+        "lat": incident.lat,
+        "lng": incident.lng,
+
+        "accuracy": incident.accuracy,
+
+        "type": incident.type,
+
+        "severity": incident.severity,
+
+        "status": incident.status,
+
+        "source": incident.source,
+
+        "location_name": incident.location_name,
+
+        "timestamp": (
+            incident.created_at.isoformat()
+            if incident.created_at
+            else None
+        ),
+
+        "dispatched_at": (
+            incident.dispatched_at.isoformat()
+            if incident.dispatched_at
+            else None
+        ),
+    }
+
+
+# ============================================================
+# REAL GPS SOS
+# ============================================================
+
+@app.post("/sos")
+def create_sos(
+    data: SOSRequest,
+    db: Session = Depends(get_db),
+):
+
+    # --------------------------------------------------------
+    # GPS VALIDATION
+    # --------------------------------------------------------
+
+    if not math.isfinite(data.lat):
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid latitude",
+        )
+
+    if not math.isfinite(data.lng):
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid longitude",
+        )
+
+    if not -90 <= data.lat <= 90:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid latitude",
+        )
+
+    if not -180 <= data.lng <= 180:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid longitude",
+        )
+
+    if (
+        data.accuracy is not None
+        and (
+            not math.isfinite(data.accuracy)
+            or data.accuracy < 0
+        )
+    ):
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid GPS accuracy",
+        )
+
+    # --------------------------------------------------------
+    # CREATE INCIDENT
+    # --------------------------------------------------------
+
+    incident = Incident(
+        incident_code="PENDING",
+        lat=data.lat,
+        lng=data.lng,
+        accuracy=data.accuracy,
+        type=data.type,
+        severity="HIGH",
+        status="ACTIVE",
+        source=data.source,
+        location_name=data.location_name,
+        created_at=datetime.utcnow(),
+    )
+
+    db.add(incident)
+
+    db.flush()
+
+    incident.incident_code = (
+        f"DR-{incident.id:06d}"
+    )
+
+    db.commit()
+
+    db.refresh(incident)
+
+    return {
+        "success": True,
+
+        "message":
+            "Emergency SOS registered successfully.",
+
+        "incident":
+            serialize_incident(incident),
+
+        "server_time":
+            datetime.utcnow().isoformat(),
+    }
+
+
+# ============================================================
+# INCIDENT LIST
+# ============================================================
+
+@app.get("/incidents")
+def get_incidents(
+    db: Session = Depends(get_db),
+):
+
+    rows = (
+        db.query(Incident)
+        .order_by(
+            Incident.created_at.desc()
+        )
+        .limit(500)
+        .all()
+    )
+
+    return [
+        serialize_incident(x)
+        for x in rows
+    ]
+
+
+# ============================================================
+# SINGLE INCIDENT
+# ============================================================
+
+@app.get("/incidents/{incident_id}")
+def get_incident(
+    incident_id: str,
+    db: Session = Depends(get_db),
+):
+
+    incident = (
+        db.query(Incident)
+        .filter(
+            Incident.incident_code
+            == incident_id
+        )
+        .first()
+    )
+
+    if not incident:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found",
+        )
+
+    return serialize_incident(
+        incident
+    )
+
+
+# ============================================================
+# DISTANCE
+# ============================================================
+
+def distance_km(
+    lat1,
+    lng1,
+    lat2,
+    lng2,
+):
+
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+
+    dlat = lat2_rad - lat1_rad
+
+    dlng = math.radians(
+        lng2 - lng1
+    )
+
+    a = (
+        math.sin(dlat / 2) ** 2
+        +
+        math.cos(lat1_rad)
+        *
+        math.cos(lat2_rad)
+        *
+        math.sin(dlng / 2) ** 2
+    )
+
+    a = min(
+        1,
+        max(
+            0,
+            a,
+        ),
+    )
+
+    return (
+        6371
+        *
+        2
+        *
+        math.atan2(
+            math.sqrt(a),
+            math.sqrt(1 - a),
+        )
+    )
+
+
+# ============================================================
+# VOLUNTEERS
+# ============================================================
+
+@app.get("/volunteers")
+def get_volunteers(
+    db: Session = Depends(get_db),
+):
+
+    rows = (
+        db.query(Volunteer)
+        .order_by(
+            Volunteer.updated_at.desc()
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": x.volunteer_code,
+            "name": x.name,
+            "lat": x.lat,
+            "lng": x.lng,
+            "status": x.status,
+            "incident_id": x.incident_id,
+            "updated_at": (
+                x.updated_at.isoformat()
+                if x.updated_at
+                else None
+            ),
+        }
+        for x in rows
+    ]
+
+
+# ============================================================
+# MEDICAL
+# ============================================================
+
+@app.get("/medical")
+def get_medical(
+    db: Session = Depends(get_db),
+):
+
+    rows = (
+        db.query(ResponseTeam)
+        .filter(
+            ResponseTeam.team_type == "MEDICAL"
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": x.team_code,
+            "name": x.name,
+            "lat": x.lat,
+            "lng": x.lng,
+            "status": x.status,
+            "incident_id": x.incident_id,
+        }
+        for x in rows
+    ]
+
+
+# ============================================================
+# RESCUE
+# ============================================================
+
+@app.get("/rescue")
+def get_rescue(
+    db: Session = Depends(get_db),
+):
+
+    rows = (
+        db.query(ResponseTeam)
+        .filter(
+            ResponseTeam.team_type == "RESCUE"
+        )
+        .all()
+    )
+
+    return [
+        {
+            "id": x.team_code,
+            "name": x.name,
+            "lat": x.lat,
+            "lng": x.lng,
+            "status": x.status,
+            "incident_id": x.incident_id,
+        }
+        for x in rows
+    ]
+
+
+# ============================================================
+# RESPONSE TEAM - MEDICAL
+# ============================================================
+
+@app.get("/response-teams/medical")
+def response_medical(
+    lat: float,
+    lng: float,
+    db: Session = Depends(get_db),
+):
+
+    teams = (
+        db.query(ResponseTeam)
+        .filter(
+            ResponseTeam.team_type == "MEDICAL"
+        )
+        .all()
+    )
+
+    result = []
+
+    for team in teams:
+
+        distance = distance_km(
+            lat,
+            lng,
+            team.lat,
+            team.lng,
+        )
+
+        result.append({
+            "id": team.team_code,
+            "name": team.name,
+            "lat": team.lat,
+            "lng": team.lng,
+            "status": team.status,
+            "dist": round(
+                distance,
+                2,
+            ),
+        })
+
+    return sorted(
+        result,
+        key=lambda x: x["dist"],
+    )
+
+
+# ============================================================
+# RESPONSE TEAM - RESCUE
+# ============================================================
+
+@app.get("/response-teams/rescue")
+def response_rescue(
+    lat: float,
+    lng: float,
+    db: Session = Depends(get_db),
+):
+
+    teams = (
+        db.query(ResponseTeam)
+        .filter(
+            ResponseTeam.team_type == "RESCUE"
+        )
+        .all()
+    )
+
+    result = []
+
+    for team in teams:
+
+        distance = distance_km(
+            lat,
+            lng,
+            team.lat,
+            team.lng,
+        )
+
+        result.append({
+            "id": team.team_code,
+            "name": team.name,
+            "lat": team.lat,
+            "lng": team.lng,
+            "status": team.status,
+            "dist": round(
+                distance,
+                2,
+            ),
+        })
+
+    return sorted(
+        result,
+        key=lambda x: x["dist"],
+    )
+
+
+# ============================================================
+# REAL DISPATCH
+# ============================================================
+
+@app.post(
+    "/incidents/{incident_id}/dispatch"
+)
+def dispatch_incident(
+    incident_id: str,
+    data: DispatchRequest,
+    db: Session = Depends(get_db),
+):
+
+    incident = (
+        db.query(Incident)
+        .filter(
+            Incident.incident_code
+            == incident_id
+        )
+        .first()
+    )
+
+    if not incident:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found",
+        )
+
+    if incident.status != "ACTIVE":
+
+        raise HTTPException(
+            status_code=400,
+            detail="Incident is not active",
+        )
+
+    incident.dispatched_at = datetime.utcnow()
+
+    requested_types = [
+        str(x).upper()
+        for x in data.requested_units
+    ]
+
+    dispatched = []
+
+    # --------------------------------------------------------
+    # VOLUNTEERS
+    # --------------------------------------------------------
+
+    if (
+        not requested_types
+        or "RESCUE" in requested_types
+        or "SDRF" in requested_types
+    ):
+
+        volunteers = (
+            db.query(Volunteer)
+            .filter(
+                Volunteer.status == "AVAILABLE"
+            )
+            .all()
+        )
+
+        volunteers = sorted(
+            volunteers,
+            key=lambda v: distance_km(
+                incident.lat,
+                incident.lng,
+                v.lat,
+                v.lng,
+            ),
+        )
+
+        for volunteer in volunteers[:5]:
+
+            distance = distance_km(
+                incident.lat,
+                incident.lng,
+                volunteer.lat,
+                volunteer.lng,
+            )
+
+            volunteer.status = "DEPLOYED"
+
+            volunteer.incident_id = incident.id
+
+            dispatched.append({
+                "type": "VOLUNTEER",
+                "id": volunteer.volunteer_code,
+                "name": volunteer.name,
+                "distance_km": round(
+                    distance,
+                    2,
+                ),
+            })
+
+    # --------------------------------------------------------
+    # RESPONSE TEAMS
+    # --------------------------------------------------------
+
+    teams = (
+        db.query(ResponseTeam)
+        .filter(
+            ResponseTeam.status == "AVAILABLE"
+        )
+        .all()
+    )
+
+    for team in teams:
+
+        if requested_types:
+
+            if (
+                team.team_type
+                not in requested_types
+                and not (
+                    team.team_type == "RESCUE"
+                    and "SDRF"
+                    in requested_types
+                )
+            ):
+
+                continue
+
+        distance = distance_km(
+            incident.lat,
+            incident.lng,
+            team.lat,
+            team.lng,
+        )
+
+        team.status = "DISPATCHED"
+
+        team.incident_id = incident.id
+
+        dispatched.append({
+            "type": team.team_type,
+            "id": team.team_code,
+            "name": team.name,
+            "distance_km": round(
+                distance,
+                2,
+            ),
+        })
+
+    incident.status = "DISPATCHED"
+
+    db.commit()
+
+    return {
+        "success": True,
+
+        "message":
+            "Response dispatch request registered.",
+
+        "incident_id":
+            incident.incident_code,
+
+        "status":
+            incident.status,
+
+        "dispatched_units":
+            dispatched,
+
+        "server_time":
+            datetime.utcnow().isoformat(),
+    }
+
+
+# ============================================================
+# UPDATE VOLUNTEER LOCATION
+# ============================================================
+
+@app.put(
+    "/volunteers/{volunteer_id}/location"
+)
+def update_volunteer_location(
+    volunteer_id: str,
+    data: TeamLocationUpdate,
+    db: Session = Depends(get_db),
+):
+
+    volunteer = (
+        db.query(Volunteer)
+        .filter(
+            Volunteer.volunteer_code
+            == volunteer_id
+        )
+        .first()
+    )
+
+    if not volunteer:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Volunteer not found",
+        )
+
+    if not -90 <= data.lat <= 90:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid latitude",
+        )
+
+    if not -180 <= data.lng <= 180:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid longitude",
+        )
+
+    volunteer.lat = data.lat
+
+    volunteer.lng = data.lng
+
+    volunteer.updated_at = datetime.utcnow()
+
+    db.commit()
+
+    return {
+        "success": True,
+        "id": volunteer_id,
+        "lat": volunteer.lat,
+        "lng": volunteer.lng,
+    }
+
+
+# ============================================================
+# AI ANALYSIS
 # ============================================================
 
 @app.post("/ai/analyze")
@@ -974,450 +1704,137 @@ def ai_analyze(
 
     text = data.text.lower()
 
-
     threat = "MODERATE"
 
-
     impact = {
-
-        "infrastructure":
-            "MODERATE",
-
-        "medical":
-            "MODERATE",
-
-        "evac":
-            "MODERATE",
+        "infrastructure": "MODERATE",
+        "medical": "MODERATE",
+        "evac": "MODERATE",
     }
 
-
     actions = [
-
         "Monitor situation",
-
         "Alert local authorities",
     ]
-
-
-    # --------------------------------------------------------
-    # EARTHQUAKE
-    # --------------------------------------------------------
 
     if "earthquake" in text:
 
         threat = "HIGH"
 
         impact = {
-
-            "infrastructure":
-                "HIGH",
-
-            "medical":
-                "HIGH",
-
-            "evac":
-                "HIGH",
+            "infrastructure": "HIGH",
+            "medical": "HIGH",
+            "evac": "HIGH",
         }
 
-
         actions = [
-
-            "Deploy 25 rescue volunteers",
-
-            "Activate 3 medical units",
-
-            "Open nearest shelter",
-
-            "Establish 5 km evacuation zone",
+            "Activate earthquake response",
+            "Check nearby medical facilities",
+            "Establish safe evacuation routes",
         ]
-
-
-    # --------------------------------------------------------
-    # FLOOD
-    # --------------------------------------------------------
 
     elif "flood" in text:
 
         threat = "CRITICAL"
 
         impact = {
-
-            "infrastructure":
-                "CRITICAL",
-
-            "medical":
-                "HIGH",
-
-            "evac":
-                "CRITICAL",
+            "infrastructure": "CRITICAL",
+            "medical": "HIGH",
+            "evac": "CRITICAL",
         }
 
-
         actions = [
-
-            "Deploy 40 rescue volunteers",
-
-            "Activate 5 medical boats",
-
-            "Open 2 shelters",
-
-            "Evacuate 10 km zone",
+            "Activate flood response",
+            "Check evacuation routes",
+            "Alert nearby residents",
         ]
-
-
-    # --------------------------------------------------------
-    # FIRE
-    # --------------------------------------------------------
 
     elif "fire" in text:
 
         threat = "HIGH"
 
         impact = {
-
-            "infrastructure":
-                "HIGH",
-
-            "medical":
-                "HIGH",
-
-            "evac":
-                "MODERATE",
+            "infrastructure": "HIGH",
+            "medical": "HIGH",
+            "evac": "MODERATE",
         }
 
-
         actions = [
-
-            "Deploy fire response teams",
-
-            "Activate medical units",
-
-            "Establish safe evacuation route",
-
+            "Activate fire response",
             "Alert nearby residents",
+            "Establish evacuation route",
         ]
-
-
-    # --------------------------------------------------------
-    # LANDSLIDE
-    # --------------------------------------------------------
 
     elif "landslide" in text:
 
         threat = "HIGH"
 
         impact = {
-
-            "infrastructure":
-                "HIGH",
-
-            "medical":
-                "HIGH",
-
-            "evac":
-                "HIGH",
+            "infrastructure": "HIGH",
+            "medical": "HIGH",
+            "evac": "HIGH",
         }
 
-
         actions = [
-
-            "Deploy rescue teams",
-
-            "Block affected roads",
-
-            "Check nearby settlements",
-
+            "Deploy rescue response",
+            "Check affected roads",
             "Establish alternate evacuation route",
         ]
 
-
     return {
-
         "threat": threat,
-
         "impact": impact,
-
         "actions": actions,
     }
 
 
 # ============================================================
-# SOS
+# PARSER
 # ============================================================
 
-@app.post("/sos")
-def trigger_sos(
-    incident: IncidentCreate,
+@app.post("/parse")
+def parse_emergency(
+    data: AIAnalyzeRequest,
 ):
 
-    incident_id = (
-        f"DR-{random.randint(1000, 9999)}"
-    )
+    text = data.text.lower()
 
+    if "earthquake" in text:
 
-    radius = 5.0
+        return {
+            "disaster_type": "EARTHQUAKE",
+            "estimated_victims": "UNKNOWN",
+            "urgency_level": "CRITICAL",
+        }
 
+    if "flood" in text:
 
-    severity = (
+        return {
+            "disaster_type": "FLOOD",
+            "estimated_victims": "UNKNOWN",
+            "urgency_level": "HIGH",
+        }
 
-        "HIGH"
+    if "fire" in text:
 
-        if incident.type.lower()
-        in [
-            "earthquake",
-            "fire",
-            "landslide",
-        ]
+        return {
+            "disaster_type": "FIRE",
+            "estimated_victims": "UNKNOWN",
+            "urgency_level": "HIGH",
+        }
 
-        else "MODERATE"
-    )
+    if "landslide" in text:
 
-
-    new_incident = {
-
-        "id": incident_id,
-
-        "lat": incident.lat,
-
-        "lng": incident.lng,
-
-        "radius": radius,
-
-        "severity": severity,
-
-        "status": "ACTIVE",
-
-        "timestamp":
-            datetime.utcnow().isoformat(),
-
-        "type": incident.type,
-
-        "magnitude":
-            6.4
-            if incident.type.lower()
-            == "earthquake"
-            else None,
-
-        "volunteers": 0,
-
-        "medical": len(medical_units),
-
-        "rescue": len(rescue_teams),
-
-        "hospitals": 4,
-    }
-
-
-    incidents.append(
-        new_incident
-    )
-
-
-    # Increase active alerts
-    dashboard_stats[
-        "active_alerts"
-    ] += 1
-
-
-    # --------------------------------------------------------
-    # FIND NEARBY VOLUNTEERS
-    # --------------------------------------------------------
-
-    assigned_volunteers = []
-
-
-    for volunteer in volunteers:
-
-        if volunteer["status"] != "AVAILABLE":
-            continue
-
-
-        distance = (
-            math.hypot(
-                volunteer["lat"]
-                - incident.lat,
-
-                volunteer["lng"]
-                - incident.lng,
-            )
-            * 111
-        )
-
-
-        if distance <= radius:
-
-            volunteer["status"] = "DEPLOYED"
-
-            volunteer["dist"] = round(
-                distance,
-                1,
-            )
-
-
-            volunteer["eta"] = max(
-                1,
-                int(
-                    distance
-                    / 30
-                    * 60
-                ),
-            )
-
-
-            assigned_volunteers.append(
-                {
-                    "id":
-                        volunteer["id"],
-
-                    "name":
-                        volunteer["name"],
-
-                    "dist":
-                        volunteer["dist"],
-
-                    "eta":
-                        volunteer["eta"],
-                }
-            )
-
-
-    assigned_count = len(
-        assigned_volunteers
-    )
-
-
-    new_incident[
-        "volunteers"
-    ] = assigned_count
-
-
-    dashboard_stats[
-        "volunteers_deployed"
-    ] += assigned_count
-
-
-    dashboard_stats[
-        "available_volunteers"
-    ] = sum(
-        1
-        for v in volunteers
-        if v["status"] == "AVAILABLE"
-    )
-
+        return {
+            "disaster_type": "LANDSLIDE",
+            "estimated_victims": "UNKNOWN",
+            "urgency_level": "HIGH",
+        }
 
     return {
-
-        "incident":
-            new_incident,
-
-        "nearby_volunteers":
-            assigned_volunteers,
-
-        "volunteers":
-            assigned_count,
-
-        "medical":
-            len(medical_units),
-
-        "rescue":
-            len(rescue_teams),
-
-        "hospitals":
-            4,
-
-        "total_responders":
-            assigned_count,
-
-        "alert_count":
-            dashboard_stats[
-                "active_alerts"
-            ],
-    }
-
-
-# ============================================================
-# INCIDENTS
-# ============================================================
-
-@app.get("/incidents")
-def get_incidents():
-
-    return incidents
-
-
-# ============================================================
-# VOLUNTEERS
-# ============================================================
-
-@app.get("/volunteers")
-def get_volunteers():
-
-    return volunteers
-
-
-# ============================================================
-# MEDICAL UNITS
-# ============================================================
-
-@app.get("/medical")
-def get_medical():
-
-    return medical_units
-
-
-# ============================================================
-# RESCUE TEAMS
-# ============================================================
-
-@app.get("/rescue")
-def get_rescue():
-
-    return rescue_teams
-
-
-# ============================================================
-# DISPATCH
-# ============================================================
-
-@app.post("/dispatch")
-def dispatch_units():
-
-    deployed = 0
-
-
-    for volunteer in volunteers:
-
-        if volunteer["status"] == "AVAILABLE":
-
-            volunteer["status"] = "DEPLOYED"
-
-            deployed += 1
-
-
-    dashboard_stats[
-        "volunteers_deployed"
-    ] += deployed
-
-
-    dashboard_stats[
-        "available_volunteers"
-    ] = sum(
-        1
-        for v in volunteers
-        if v["status"] == "AVAILABLE"
-    )
-
-
-    return {
-
-        "message":
-            "Nearby units dispatched successfully",
-
-        "deployed":
-            deployed,
-
-        "status":
-            "DISPATCHED",
+        "disaster_type": "UNKNOWN",
+        "estimated_victims": "UNKNOWN",
+        "urgency_level": "MODERATE",
     }
 
 
@@ -1426,16 +1843,24 @@ def dispatch_units():
 # ============================================================
 
 @app.on_event("startup")
-def startup_event():
+def startup():
 
     print(
         "🚨 Global Disaster Relief System API started"
     )
 
     print(
-        "🌐 CORS configured for Vercel + localhost"
+        "📡 Real-time incident API ready"
     )
 
     print(
-        "📡 API is ready"
+        "📍 GPS SOS endpoint ready"
+    )
+
+    print(
+        "💰 Real donation database ready"
+    )
+
+    print(
+        "🚑 Response team API ready"
     )

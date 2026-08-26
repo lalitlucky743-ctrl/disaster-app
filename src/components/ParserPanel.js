@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
 // ============================================================
@@ -25,20 +25,115 @@ const api = axios.create({
 // PARSER PANEL
 // ============================================================
 
-const ParserPanel = () => {
-  const [inputText] = useState(
-    'Earthquake Magnitude 6.4 detected near downtown.'
-  );
-
+const ParserPanel = ({ liveDisasterData }) => {
+  const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [aiData, setAiData] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  // ==========================================================
+  // CONVERT LIVE DATA INTO AI INPUT
+  // ==========================================================
+
+  useEffect(() => {
+    if (!liveDisasterData) {
+      setInputText('');
+      return;
+    }
+
+    let text = '';
+
+    // --------------------------------------------------------
+    // If backend already provides an alert/message
+    // --------------------------------------------------------
+
+    if (liveDisasterData.message) {
+      text = liveDisasterData.message;
+    }
+
+    // --------------------------------------------------------
+    // Otherwise build text from live data
+    // --------------------------------------------------------
+
+    else {
+      const {
+        district,
+        disaster,
+        magnitude,
+        temperature,
+        humidity,
+        rain,
+        precipitation,
+        wind_speed,
+        weather_code,
+      } = liveDisasterData;
+
+      const parts = [];
+
+      if (district) {
+        parts.push(`District: ${district}`);
+      }
+
+      if (disaster) {
+        parts.push(`Disaster: ${disaster}`);
+      }
+
+      if (magnitude !== undefined && magnitude !== null) {
+        parts.push(`Magnitude: ${magnitude}`);
+      }
+
+      if (temperature !== undefined && temperature !== null) {
+        parts.push(`Temperature: ${temperature}°C`);
+      }
+
+      if (humidity !== undefined && humidity !== null) {
+        parts.push(`Humidity: ${humidity}%`);
+      }
+
+      if (rain !== undefined && rain !== null) {
+        parts.push(`Rain: ${rain} mm`);
+      }
+
+      if (
+        precipitation !== undefined &&
+        precipitation !== null
+      ) {
+        parts.push(
+          `Precipitation: ${precipitation} mm`
+        );
+      }
+
+      if (
+        wind_speed !== undefined &&
+        wind_speed !== null
+      ) {
+        parts.push(
+          `Wind Speed: ${wind_speed} km/h`
+        );
+      }
+
+      if (weather_code !== undefined && weather_code !== null) {
+        parts.push(
+          `Weather Code: ${weather_code}`
+        );
+      }
+
+      text = parts.join(' | ');
+    }
+
+    setInputText(text);
+    setLastUpdated(new Date());
+
+  }, [liveDisasterData]);
 
   // ==========================================================
   // AI ANALYSIS
   // ==========================================================
 
   const analyzeAI = async () => {
-    if (loading) return;
+    if (loading || !inputText.trim()) {
+      return;
+    }
 
     setLoading(true);
     setAiData(null);
@@ -49,6 +144,7 @@ const ParserPanel = () => {
       });
 
       setAiData(res.data);
+      setLastUpdated(new Date());
 
     } catch (error) {
       console.error(
@@ -67,6 +163,19 @@ const ParserPanel = () => {
       setLoading(false);
     }
   };
+
+  // ==========================================================
+  // AUTO ANALYZE LIVE DATA
+  // ==========================================================
+
+  useEffect(() => {
+    if (!inputText.trim()) {
+      return;
+    }
+
+    analyzeAI();
+
+  }, [inputText]);
 
   // ==========================================================
   // SAFE AI DATA
@@ -92,6 +201,7 @@ const ParserPanel = () => {
       className="parser-panel"
       style={{ zIndex: 1000 }}
     >
+
       {/* ======================================================
           TITLE
       ====================================================== */}
@@ -101,15 +211,17 @@ const ParserPanel = () => {
       </div>
 
       <div className="parser-sub">
-        Connected to AI Model
+        {inputText
+          ? 'Connected to Live Disaster Data'
+          : 'Waiting for Live Disaster Data...'}
       </div>
 
       {/* ======================================================
-          INPUT
+          LIVE INPUT
       ====================================================== */}
 
       <div className="parser-input">
-        {inputText}
+        {inputText || 'No live disaster data available.'}
       </div>
 
       {/* ======================================================
@@ -117,21 +229,45 @@ const ParserPanel = () => {
       ====================================================== */}
 
       <div className="parsed-tag">
+
         <span
           className="badge green"
           onClick={analyzeAI}
           style={{
-            cursor: loading
-              ? 'not-allowed'
-              : 'pointer',
-            opacity: loading ? 0.7 : 1,
+            cursor:
+              loading || !inputText
+                ? 'not-allowed'
+                : 'pointer',
+
+            opacity:
+              loading || !inputText
+                ? 0.7
+                : 1,
           }}
         >
           {loading
             ? 'ANALYZING...'
-            : 'ANALYZE'}
+            : 'ANALYZE LIVE DATA'}
         </span>
+
       </div>
+
+      {/* ======================================================
+          LAST UPDATED
+      ====================================================== */}
+
+      {lastUpdated && (
+        <div
+          style={{
+            fontSize: '8px',
+            marginTop: '6px',
+            opacity: 0.7,
+          }}
+        >
+          LIVE UPDATE:{' '}
+          {lastUpdated.toLocaleTimeString()}
+        </div>
+      )}
 
       {/* ======================================================
           AI RESULT
@@ -146,6 +282,7 @@ const ParserPanel = () => {
             fontSize: '8px',
           }}
         >
+
           {/* Threat */}
 
           <b
@@ -170,10 +307,12 @@ const ParserPanel = () => {
 
           Infrastructure:{' '}
           {impact.infrastructure || 'N/A'}
+
           <br />
 
           Medical:{' '}
           {impact.medical || 'N/A'}
+
           <br />
 
           Evac:{' '}
@@ -199,8 +338,10 @@ const ParserPanel = () => {
               No recommended actions available.
             </span>
           )}
+
         </div>
       )}
+
     </div>
   );
 };

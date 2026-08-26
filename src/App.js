@@ -1,21 +1,24 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+
 import { AuthProvider, useAuth } from './AuthContext';
+
 import Login from './Login';
 import Register from './Register';
+
 import Header from './components/Header';
 import StatBar from './components/StatBar';
 import MapArea from './components/MapArea';
-import axios from 'axios';
+
 
 // ============================================================
-// API CONFIGURATION
+// API CONFIG
 // ============================================================
-
-// Vercel Environment Variable:
-// VITE_API_URL=https://disaster-app-30ll.onrender.com
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || 'https://disaster-app-30ll.onrender.com';
+  import.meta.env.VITE_API_URL?.replace(/\/+$/, '') ||
+  'https://disaster-app-30ll.onrender.com';
+
 
 // ============================================================
 // AXIOS INSTANCE
@@ -23,20 +26,22 @@ const API_BASE_URL =
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000,
 });
 
+
 // ============================================================
-// DASHBOARD COMPONENT
+// DASHBOARD
 // ============================================================
 
 const DashboardApp = () => {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [profile, setProfile] = useState({
@@ -46,145 +51,401 @@ const DashboardApp = () => {
 
   const [newEmail, setNewEmail] = useState('');
 
-  const [stats, setStats] = useState({
-    active_alerts: 7,
-    volunteers_deployed: 210,
-  });
+  const [stats, setStats] = useState(null);
 
-  // ============================================================
-  // LOAD USER + STATS
-  // ============================================================
+  const [statsLoading, setStatsLoading] = useState(true);
 
-  React.useEffect(() => {
-    if (user) {
-      setProfile(user);
-      setNewEmail(user.email || '');
+  const [statsError, setStatsError] = useState('');
+
+  // ==========================================================
+  // AUTH HEADER
+  // ==========================================================
+
+  const authConfig = token
+    ? {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    : {};
+
+  // ==========================================================
+  // LOAD PROFILE
+  // ==========================================================
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadProfile = async () => {
+      try {
+        // First use authenticated backend profile.
+        const response = await api.get(
+          '/profile',
+          authConfig
+        );
+
+        if (!mounted) return;
+
+        const backendUser = response?.data;
+
+        if (backendUser) {
+          setProfile({
+            username: backendUser.username || '',
+            email: backendUser.email || '',
+          });
+
+          setNewEmail(
+            backendUser.email || ''
+          );
+        }
+      } catch (error) {
+        console.error(
+          'Profile fetch failed:',
+          error
+        );
+
+        // Do NOT break dashboard if profile endpoint
+        // temporarily fails. Use AuthContext user only.
+        if (!mounted && !user) return;
+
+        if (user) {
+          setProfile({
+            username: user.username || '',
+            email: user.email || '',
+          });
+
+          setNewEmail(
+            user.email || ''
+          );
+        }
+      }
+    };
+
+    if (token) {
+      loadProfile();
+    } else if (user) {
+      setProfile({
+        username: user.username || '',
+        email: user.email || '',
+      });
+
+      setNewEmail(
+        user.email || ''
+      );
     }
+
+    return () => {
+      mounted = false;
+    };
+  }, [token, user]);
+
+
+  // ==========================================================
+  // LOAD REAL STATS
+  // ==========================================================
+
+  useEffect(() => {
+    let mounted = true;
 
     const fetchStats = async () => {
       try {
-        const res = await api.get('/stats');
-        setStats(res.data);
+        setStatsLoading(true);
+        setStatsError('');
+
+        const response = await api.get(
+          '/stats'
+        );
+
+        if (!mounted) return;
+
+        const data = response?.data;
+
+        if (
+          !data ||
+          typeof data !== 'object'
+        ) {
+          throw new Error(
+            'Invalid stats response'
+          );
+        }
+
+        setStats({
+          active_alerts:
+            Number.isFinite(
+              Number(data.active_alerts)
+            )
+              ? Number(data.active_alerts)
+              : null,
+
+          volunteers_deployed:
+            Number.isFinite(
+              Number(
+                data.volunteers_deployed
+              )
+            )
+              ? Number(
+                  data.volunteers_deployed
+                )
+              : null,
+
+          available_volunteers:
+            Number.isFinite(
+              Number(
+                data.available_volunteers
+              )
+            )
+              ? Number(
+                  data.available_volunteers
+                )
+              : null,
+
+          status:
+            data.status || 'UNKNOWN',
+
+          latency:
+            data.latency || null,
+
+          server_time:
+            data.server_time || null,
+        });
       } catch (error) {
-        console.error('Failed to fetch stats:', error);
+        console.error(
+          'Failed to fetch real stats:',
+          error
+        );
+
+        if (!mounted) return;
+
+        setStats(null);
+
+        setStatsError(
+          'Live backend statistics unavailable.'
+        );
+      } finally {
+        if (mounted) {
+          setStatsLoading(false);
+        }
       }
     };
 
     fetchStats();
-  }, [user]);
 
-  // ============================================================
-  // REFRESH
-  // ============================================================
+    return () => {
+      mounted = false;
+    };
+  }, [refreshKey]);
+
+
+  // ==========================================================
+  // REFRESH EVERYTHING
+  // ==========================================================
 
   const handleRefresh = () => {
-    setRefreshKey((prev) => prev + 1);
+    setRefreshKey(
+      (previous) => previous + 1
+    );
   };
 
-  // ============================================================
+
+  // ==========================================================
   // OPERATION CENTER
-  // ============================================================
+  // ==========================================================
 
   const handleOperationCenter = async () => {
     try {
-      const res = await api.get('/stats');
+      const response = await api.get(
+        '/stats'
+      );
 
-      const data = res.data;
+      const data = response?.data;
+
+      if (!data) {
+        throw new Error(
+          'Invalid backend response'
+        );
+      }
 
       alert(
         `🛰️ OPERATION CENTER\n\n` +
-        `Active Incidents: ${data.active_alerts}\n` +
-        `Volunteers Deployed: ${data.volunteers_deployed}\n` +
-        `System Status: ${data.status || 'OPERATIONAL'}\n` +
-        `Data Latency: ${data.latency || 'N/A'}`
+        `Active Incidents: ${
+          data.active_alerts ?? '—'
+        }\n` +
+        `Volunteers Deployed: ${
+          data.volunteers_deployed ?? '—'
+        }\n` +
+        `Available Volunteers: ${
+          data.available_volunteers ?? '—'
+        }\n` +
+        `System Status: ${
+          data.status || 'UNKNOWN'
+        }\n` +
+        `Data Latency: ${
+          data.latency || 'N/A'
+        }`
       );
     } catch (error) {
-      console.error('Operation Center error:', error);
+      console.error(
+        'Operation Center error:',
+        error
+      );
 
       alert(
-        '🛰️ Operation Center\n\n' +
-        'Status: OPERATIONAL\n' +
-        'Backend connection could not be verified.'
+        '🛰️ OPERATION CENTER\n\n' +
+        'Live backend statistics could not be verified.'
       );
     }
   };
 
-  // ============================================================
+
+  // ==========================================================
   // SETTINGS
-  // ============================================================
+  // ==========================================================
 
   const handleSettingsToggle = () => {
-    setIsSettingsOpen((prev) => !prev);
+    setIsSettingsOpen(
+      (previous) => !previous
+    );
   };
 
-  // ============================================================
+
+  // ==========================================================
   // AVATAR / PROFILE
-  // ============================================================
+  // ==========================================================
 
   const handleAvatarToggle = () => {
     alert(
       `👤 OPERATOR PROFILE\n\n` +
-      `Username: ${profile.username || 'N/A'}\n` +
-      `Email: ${profile.email || 'N/A'}\n` +
+      `Username: ${
+        profile.username || 'N/A'
+      }\n` +
+      `Email: ${
+        profile.email || 'N/A'
+      }\n` +
       `Role: Emergency Coordinator\n` +
       `Access: LEVEL 4`
     );
   };
 
-  // ============================================================
+
+  // ==========================================================
   // UPDATE PROFILE
-  // ============================================================
+  // ==========================================================
 
   const handleUpdateProfile = async () => {
-    if (!newEmail.trim()) {
-      alert('Please enter a valid email address.');
+    const email =
+      newEmail.trim();
+
+    if (!email) {
+      alert(
+        'Please enter a valid email address.'
+      );
       return;
     }
 
     try {
-      await api.put('/profile', {
-        email: newEmail,
-      });
+      /*
+       * IMPORTANT:
+       * Your original backend has GET /profile
+       * but does NOT have PUT /profile.
+       *
+       * This frontend now tries the backend update
+       * only if that endpoint exists.
+       */
 
-      setProfile((prev) => ({
-        ...prev,
-        email: newEmail,
-      }));
+      await api.put(
+        '/profile',
+        {
+          email,
+        },
+        authConfig
+      );
+
+      setProfile(
+        (previous) => ({
+          ...previous,
+          email,
+        })
+      );
 
       setIsSettingsOpen(false);
 
-      alert('✅ Profile updated successfully.');
+      alert(
+        '✅ Profile updated successfully.'
+      );
     } catch (error) {
-      console.error('Profile update error:', error);
+      console.error(
+        'Profile update error:',
+        error
+      );
 
-      alert('❌ Failed to update profile. Please try again.');
+      const detail =
+        error?.response?.data?.detail;
+
+      if (
+        error?.response?.status === 404 ||
+        error?.response?.status === 405
+      ) {
+        alert(
+          '⚠️ Profile update endpoint is not enabled on the backend yet.'
+        );
+      } else {
+        alert(
+          detail ||
+            '❌ Failed to update profile.'
+        );
+      }
     }
   };
 
-  // ============================================================
+
+  // ==========================================================
   // UI
-  // ============================================================
+  // ==========================================================
 
   return (
     <div className="dashboard">
-      <div className="bg-grid"></div>
 
-      {/* Header */}
-      <Header
-        onRefresh={handleRefresh}
-        onOperationCenter={handleOperationCenter}
-        onSettingsToggle={handleSettingsToggle}
-        onAvatarToggle={handleAvatarToggle}
-      />
+      <div className="bg-grid" />
 
-      {/* Stats */}
-      <StatBar refreshKey={refreshKey} />
-
-      {/* Map */}
-      <MapArea refreshKey={refreshKey} />
 
       {/* ======================================================
-          SETTINGS / PROFILE MODAL
+          HEADER
+      ====================================================== */}
+
+      <Header
+        onRefresh={handleRefresh}
+        onOperationCenter={
+          handleOperationCenter
+        }
+        onSettingsToggle={
+          handleSettingsToggle
+        }
+        onAvatarToggle={
+          handleAvatarToggle
+        }
+      />
+
+
+      {/* ======================================================
+          STATS
+      ====================================================== */}
+
+      <StatBar
+        refreshKey={refreshKey}
+      />
+
+
+      {/* ======================================================
+          MAP
+      ====================================================== */}
+
+      <MapArea
+        refreshKey={refreshKey}
+      />
+
+
+      {/* ======================================================
+          SETTINGS / PROFILE
       ====================================================== */}
 
       {isSettingsOpen && (
@@ -197,17 +458,23 @@ const DashboardApp = () => {
             width: '250px',
             zIndex: 999,
             background: '#0d1424',
-            border: '1px solid #334155',
+            border:
+              '1px solid #334155',
             padding: '16px 20px',
             borderRadius: '8px',
-            boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
+            boxShadow:
+              '0 10px 25px rgba(0,0,0,0.6)',
           }}
         >
+
           <button
             className="modal-close"
-            onClick={() => setIsSettingsOpen(false)}
+            onClick={() =>
+              setIsSettingsOpen(false)
+            }
             style={{
-              background: 'transparent',
+              background:
+                'transparent',
               border: 'none',
               color: '#94a3b8',
               fontSize: '14px',
@@ -218,7 +485,9 @@ const DashboardApp = () => {
             ✕
           </button>
 
+
           <div className="modal-content">
+
             <h3
               style={{
                 color: '#fff',
@@ -229,6 +498,9 @@ const DashboardApp = () => {
               Profile
             </h3>
 
+
+            {/* USERNAME */}
+
             <div
               style={{
                 marginBottom: '8px',
@@ -237,14 +509,23 @@ const DashboardApp = () => {
               }}
             >
               Username:{' '}
-              <span style={{ color: '#fff' }}>
-                {profile.username || 'N/A'}
+
+              <span
+                style={{
+                  color: '#fff',
+                }}
+              >
+                {profile.username ||
+                  'N/A'}
               </span>
             </div>
 
+
+            {/* EMAIL */}
+
             <div
               style={{
-                marginBottom: '12px',
+                marginBottom: '6px',
                 fontSize: '12px',
                 color: '#94a3b8',
               }}
@@ -252,29 +533,43 @@ const DashboardApp = () => {
               Email:
             </div>
 
+
             <input
               type="email"
               value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
+              onChange={(event) =>
+                setNewEmail(
+                  event.target.value
+                )
+              }
               placeholder="Enter new email"
               style={{
                 width: '100%',
                 padding: '6px',
-                background: '#1e293b',
-                border: '1px solid #334155',
+                background:
+                  '#1e293b',
+                border:
+                  '1px solid #334155',
                 color: '#fff',
                 marginBottom: '10px',
                 borderRadius: '4px',
-                boxSizing: 'border-box',
+                boxSizing:
+                  'border-box',
               }}
             />
 
+
+            {/* UPDATE */}
+
             <button
-              onClick={handleUpdateProfile}
+              onClick={
+                handleUpdateProfile
+              }
               style={{
                 width: '100%',
                 padding: '6px',
-                background: '#3b82f6',
+                background:
+                  '#3b82f6',
                 border: 'none',
                 color: '#fff',
                 cursor: 'pointer',
@@ -285,12 +580,16 @@ const DashboardApp = () => {
               Update Email
             </button>
 
+
+            {/* LOGOUT */}
+
             <button
               onClick={logout}
               style={{
                 width: '100%',
                 padding: '6px',
-                background: '#ef4444',
+                background:
+                  '#ef4444',
                 border: 'none',
                 color: '#fff',
                 cursor: 'pointer',
@@ -299,12 +598,15 @@ const DashboardApp = () => {
             >
               Logout
             </button>
+
           </div>
         </div>
       )}
+
     </div>
   );
 };
+
 
 // ============================================================
 // MAIN APP
@@ -313,18 +615,38 @@ const DashboardApp = () => {
 const MainApp = () => {
   const { token } = useAuth();
 
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] =
+    useState(true);
+
+
+  // ==========================================================
+  // AUTHENTICATED
+  // ==========================================================
 
   if (token) {
     return <DashboardApp />;
   }
 
+
+  // ==========================================================
+  // LOGIN / REGISTER
+  // ==========================================================
+
   return isLogin ? (
-    <Login onSwitch={() => setIsLogin(false)} />
+    <Login
+      onSwitch={() =>
+        setIsLogin(false)
+      }
+    />
   ) : (
-    <Register onSwitch={() => setIsLogin(true)} />
+    <Register
+      onSwitch={() =>
+        setIsLogin(true)
+      }
+    />
   );
 };
+
 
 // ============================================================
 // APP ENTRY
@@ -337,5 +659,6 @@ function App() {
     </AuthProvider>
   );
 }
+
 
 export default App;

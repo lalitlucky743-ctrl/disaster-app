@@ -22,6 +22,12 @@ const api = axios.create({
 });
 
 // ============================================================
+// REAL-TIME REFRESH INTERVAL
+// ============================================================
+
+const REFRESH_INTERVAL = 10000; // 10 seconds
+
+// ============================================================
 // STAT BAR
 // ============================================================
 
@@ -37,39 +43,85 @@ const StatBar = ({ refreshKey }) => {
   const [loading, setLoading] = useState(true);
 
   // ==========================================================
-  // FETCH STATS
+  // FETCH LIVE STATS
   // ==========================================================
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchStats = async () => {
       try {
-        setLoading(true);
+        const startTime = Date.now();
 
         const res = await api.get('/stats');
 
+        const requestLatency = Date.now() - startTime;
+
+        if (!isMounted) return;
+
         setStats({
-          active_alerts: res.data?.active_alerts ?? 0,
+          active_alerts:
+            res.data?.active_alerts ?? 0,
+
           volunteers_deployed:
             res.data?.volunteers_deployed ?? 0,
+
           available_volunteers:
             res.data?.available_volunteers ?? 0,
-          status: res.data?.status || 'OPERATIONAL',
-          latency: res.data?.latency || 'N/A',
+
+          status:
+            res.data?.status ||
+            'OPERATIONAL',
+
+          latency:
+            res.data?.latency ??
+            `${requestLatency} ms`,
         });
+
+        setLoading(false);
+
       } catch (error) {
-        console.error('Failed to fetch stats:', error);
+        if (!isMounted) return;
+
+        console.error(
+          'Failed to fetch live stats:',
+          error
+        );
 
         setStats((prev) => ({
           ...prev,
           status: 'OFFLINE',
           latency: 'N/A',
         }));
-      } finally {
+
         setLoading(false);
       }
     };
 
+    // --------------------------------------------------------
+    // FIRST REQUEST IMMEDIATELY
+    // --------------------------------------------------------
+
     fetchStats();
+
+    // --------------------------------------------------------
+    // REAL-TIME POLLING
+    // --------------------------------------------------------
+
+    const interval = setInterval(
+      fetchStats,
+      REFRESH_INTERVAL
+    );
+
+    // --------------------------------------------------------
+    // CLEANUP
+    // --------------------------------------------------------
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+
   }, [refreshKey]);
 
   // ==========================================================
@@ -81,7 +133,9 @@ const StatBar = ({ refreshKey }) => {
       icon: 'alert',
       color: '#f87171',
       label: 'Active Alerts:',
-      value: loading ? '...' : stats.active_alerts,
+      value: loading
+        ? '...'
+        : stats.active_alerts,
     },
 
     {
@@ -106,7 +160,10 @@ const StatBar = ({ refreshKey }) => {
       icon: 'check',
       color: '#34d399',
       label: 'System Status:',
-      value: loading ? 'LOADING' : stats.status,
+      value: loading
+        ? 'LOADING'
+        : stats.status,
+
       green:
         !loading &&
         String(stats.status).toUpperCase() ===
@@ -117,7 +174,9 @@ const StatBar = ({ refreshKey }) => {
       icon: 'bolt',
       color: '#facc15',
       label: 'Data Latency:',
-      value: loading ? '...' : stats.latency,
+      value: loading
+        ? '...'
+        : stats.latency,
     },
   ];
 
@@ -127,12 +186,16 @@ const StatBar = ({ refreshKey }) => {
 
   return (
     <div className="stat-bar">
+
       {statItems.map((s, i) => (
         <div
           className="stat-card"
           key={i}
         >
-          {/* Icon */}
+
+          {/* ==================================================
+              ICON
+          ================================================== */}
 
           <svg
             width="14"
@@ -145,6 +208,7 @@ const StatBar = ({ refreshKey }) => {
             strokeLinejoin="round"
             aria-hidden="true"
           >
+
             {/* Alert */}
 
             {s.icon === 'alert' && (
@@ -176,11 +240,15 @@ const StatBar = ({ refreshKey }) => {
             {s.icon === 'bolt' && (
               <path d="M13 10V3L4 14h7v7l9-11h-7z" />
             )}
+
           </svg>
 
-          {/* Text */}
+          {/* ==================================================
+              TEXT
+          ================================================== */}
 
           <div>
+
             <div className="stat-label">
               {s.label}
             </div>
@@ -192,9 +260,12 @@ const StatBar = ({ refreshKey }) => {
             >
               {s.value}
             </div>
+
           </div>
+
         </div>
       ))}
+
     </div>
   );
 };

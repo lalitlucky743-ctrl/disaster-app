@@ -1,13 +1,13 @@
 import React, {
   createContext,
-  useState,
   useContext,
   useEffect,
+  useState,
 } from 'react';
 import axios from 'axios';
 
 // ============================================================
-// API CONFIGURATION
+// API CONFIG
 // ============================================================
 
 const API_BASE_URL =
@@ -15,7 +15,7 @@ const API_BASE_URL =
   'https://disaster-app-30ll.onrender.com';
 
 // ============================================================
-// AXIOS INSTANCE
+// AXIOS
 // ============================================================
 
 const api = axios.create({
@@ -34,55 +34,75 @@ const AuthContext = createContext(null);
 // ============================================================
 
 export const AuthProvider = ({ children }) => {
+  const [token, setToken] = useState(() => {
+    return localStorage.getItem('token');
+  });
+
   const [user, setUser] = useState(null);
-
-  const [token, setToken] = useState(() =>
-    localStorage.getItem('token')
-  );
-
   const [loading, setLoading] = useState(true);
 
   // ==========================================================
-  // SET AUTHORIZATION HEADER
+  // AUTH HEADER
   // ==========================================================
 
   useEffect(() => {
     if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      api.defaults.headers.common.Authorization = `Bearer ${token}`;
     } else {
-      delete api.defaults.headers.common['Authorization'];
+      delete api.defaults.headers.common.Authorization;
     }
   }, [token]);
 
   // ==========================================================
-  // FETCH CURRENT USER PROFILE
+  // LOAD PROFILE
   // ==========================================================
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    let cancelled = false;
+
+    const loadProfile = async () => {
+      // No token = not logged in
       if (!token) {
-        setUser(null);
-        setLoading(false);
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+        }
         return;
       }
 
+      setLoading(true);
+
       try {
-        const res = await api.get('/profile');
+        const response = await api.get('/profile');
 
-        setUser(res.data);
+        if (!cancelled) {
+          setUser(response.data);
+        }
       } catch (error) {
-        console.error('Profile fetch failed:', error);
+        console.error(
+          '❌ Authentication/profile verification failed:',
+          error
+        );
 
-        // Invalid/expired token
+        // Token invalid / expired
         localStorage.removeItem('token');
-        setToken(null);
-        setUser(null);
+
+        if (!cancelled) {
+          setToken(null);
+          setUser(null);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchProfile();
+    loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   // ==========================================================
@@ -90,34 +110,75 @@ export const AuthProvider = ({ children }) => {
   // ==========================================================
 
   const login = async (username, password) => {
-    try {
-      const formData = new FormData();
+    const cleanUsername = username?.trim();
 
-      formData.append('username', username);
+    if (!cleanUsername) {
+      throw new Error('Username is required.');
+    }
+
+    if (!password) {
+      throw new Error('Password is required.');
+    }
+
+    try {
+      // FastAPI OAuth2PasswordRequestForm
+      const formData = new URLSearchParams();
+
+      formData.append('username', cleanUsername);
       formData.append('password', password);
 
-      const res = await api.post('/login', formData);
+      const response = await api.post(
+        '/login',
+        formData,
+        {
+          headers: {
+            'Content-Type':
+              'application/x-www-form-urlencoded',
+          },
+        }
+      );
 
-      const { access_token } = res.data;
+      const accessToken =
+        response.data?.access_token;
 
-      if (!access_token) {
-        throw new Error('No access token received from server.');
+      if (!accessToken) {
+        throw new Error(
+          'Server did not return an access token.'
+        );
       }
 
       // Save token
-      localStorage.setItem('token', access_token);
+      localStorage.setItem(
+        'token',
+        accessToken
+      );
 
-      // Update React state
-      setToken(access_token);
+      // Update state
+      setToken(accessToken);
 
-      // Set Authorization immediately
-      api.defaults.headers.common[
-        'Authorization'
-      ] = `Bearer ${access_token}`;
+      // Immediately authorize API requests
+      api.defaults.headers.common.Authorization =
+        `Bearer ${accessToken}`;
+
+      // Fetch actual user profile
+      const profileResponse =
+        await api.get('/profile');
+
+      setUser(profileResponse.data);
 
       return true;
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error(
+        '❌ Login failed:',
+        error
+      );
+
+      // Make sure failed login never leaves
+      // a broken token behind.
+      localStorage.removeItem('token');
+
+      setToken(null);
+      setUser(null);
 
       const message =
         error.response?.data?.detail ||
@@ -133,17 +194,54 @@ export const AuthProvider = ({ children }) => {
   // REGISTER
   // ==========================================================
 
-  const register = async (username, email, password) => {
+  const register = async (
+    username,
+    email,
+    password
+  ) => {
+    const cleanUsername =
+      username?.trim();
+
+    const cleanEmail =
+      email?.trim().toLowerCase();
+
+    if (!cleanUsername) {
+      throw new Error(
+        'Username is required.'
+      );
+    }
+
+    if (!cleanEmail) {
+      throw new Error(
+        'Email is required.'
+      );
+    }
+
+    if (!password) {
+      throw new Error(
+        'Password is required.'
+      );
+    }
+
+    if (password.length < 6) {
+      throw new Error(
+        'Password must be at least 6 characters.'
+      );
+    }
+
     try {
       await api.post('/register', {
-        username,
-        email,
+        username: cleanUsername,
+        email: cleanEmail,
         password,
       });
 
       return true;
     } catch (error) {
-      console.error('Registration failed:', error);
+      console.error(
+        '❌ Registration failed:',
+        error
+      );
 
       const message =
         error.response?.data?.detail ||
@@ -162,14 +260,14 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('token');
 
-    delete api.defaults.headers.common['Authorization'];
+    delete api.defaults.headers.common.Authorization;
 
     setToken(null);
     setUser(null);
   };
 
   // ==========================================================
-  // AUTH CONTEXT VALUE
+  // CONTEXT
   // ==========================================================
 
   const value = {
@@ -189,7 +287,7 @@ export const AuthProvider = ({ children }) => {
 };
 
 // ============================================================
-// USE AUTH HOOK
+// USE AUTH
 // ============================================================
 
 export const useAuth = () => {
@@ -197,7 +295,7 @@ export const useAuth = () => {
 
   if (!context) {
     throw new Error(
-      'useAuth must be used inside an AuthProvider'
+      'useAuth must be used inside an AuthProvider.'
     );
   }
 

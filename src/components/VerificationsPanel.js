@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 // ============================================================
@@ -16,57 +16,108 @@ const API_BASE_URL =
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 // ============================================================
 // VERIFICATIONS PANEL
 // ============================================================
 
-const VerificationsPanel = ({ refreshKey }) => {
+const VerificationsPanel = ({ refreshKey = 0 }) => {
   const [items, setItems] = useState([]);
   const [isVisible, setIsVisible] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   // ==========================================================
   // FETCH VERIFICATIONS
   // ==========================================================
 
-  const fetchVerifs = async () => {
+  const fetchVerifications = useCallback(async () => {
     try {
+      setLoading(true);
+
       const res = await api.get('/verifications');
 
-      setItems(
-        Array.isArray(res.data)
-          ? res.data
-          : []
-      );
+      const data = Array.isArray(res.data)
+        ? res.data
+        : [];
+
+      setItems(data);
     } catch (error) {
       console.error(
         'Failed to fetch verification pipeline:',
         error
       );
+
+      // Keep previous data instead of unnecessarily clearing it.
+      // If there is no data yet, show empty state.
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   // ==========================================================
   // INITIAL FETCH + AUTO REFRESH
   // ==========================================================
 
   useEffect(() => {
-    fetchVerifs();
+    fetchVerifications();
 
-    // Auto-refresh pipeline every 3 seconds
-    const interval = setInterval(
-      fetchVerifs,
-      3000
-    );
+    const interval = setInterval(() => {
+      fetchVerifications();
+    }, 3000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [refreshKey]);
+  }, [fetchVerifications, refreshKey]);
+
+  // ==========================================================
+  // STATUS COLOR
+  // ==========================================================
+
+  const getStatusColor = (status) => {
+    switch (String(status).toUpperCase()) {
+      case 'SUCCESSFUL':
+      case 'SUCCESS':
+      case 'VERIFIED':
+        return '#34d399';
+
+      case 'PROCESSING':
+      case 'PENDING':
+        return '#facc15';
+
+      case 'FAILED':
+      case 'REJECTED':
+        return '#f87171';
+
+      default:
+        return '#94a3b8';
+    }
+  };
+
+  // ==========================================================
+  // STATUS ICON
+  // ==========================================================
+
+  const getStatusIcon = (status) => {
+    switch (String(status).toUpperCase()) {
+      case 'SUCCESSFUL':
+      case 'SUCCESS':
+      case 'VERIFIED':
+        return '✅';
+
+      case 'PROCESSING':
+      case 'PENDING':
+        return '⏳';
+
+      case 'FAILED':
+      case 'REJECTED':
+        return '❌';
+
+      default:
+        return '•';
+    }
+  };
 
   // ==========================================================
   // HIDDEN STATE
@@ -103,36 +154,6 @@ const VerificationsPanel = ({ refreshKey }) => {
   }
 
   // ==========================================================
-  // STATUS HELPERS
-  // ==========================================================
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Successful':
-        return '#34d399';
-
-      case 'Processing':
-        return '#facc15';
-
-      default:
-        return '#f87171';
-    }
-  };
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'Successful':
-        return '✅';
-
-      case 'Processing':
-        return '⏳';
-
-      default:
-        return '❌';
-    }
-  };
-
-  // ==========================================================
   // UI
   // ==========================================================
 
@@ -143,9 +164,7 @@ const VerificationsPanel = ({ refreshKey }) => {
         zIndex: 1000,
       }}
     >
-      {/* ====================================================
-          HEADER
-      ==================================================== */}
+      {/* HEADER */}
 
       <div className="verif-header">
         <span className="verif-header-title">
@@ -167,46 +186,59 @@ const VerificationsPanel = ({ refreshKey }) => {
         </button>
       </div>
 
-      {/* ====================================================
-          VERIFICATION LIST
-      ==================================================== */}
+      {/* LIST */}
 
       <div className="verif-list">
-        {items.length > 0 ? (
-          items.map((item, i) => (
-            <div
-              className="verif-row"
-              key={item.id ?? i}
-              style={{
-                display: 'flex',
-                justifyContent:
-                  'space-between',
-                padding: '3px 8px',
-                fontSize: '7.5px',
-                borderBottom:
-                  '1px solid rgba(30,41,59,0.6)',
-              }}
-            >
-              <span className="verif-name">
-                {item.name || 'Unknown'}
-              </span>
+        {loading && items.length === 0 ? (
+          <div
+            style={{
+              padding: '8px',
+              fontSize: '8px',
+              color: '#64748b',
+              textAlign: 'center',
+            }}
+          >
+            Loading verification data...
+          </div>
+        ) : items.length > 0 ? (
+          items.map((item, index) => {
+            const status = item.status || 'Unknown';
 
-              <span
-                className="verif-status"
+            return (
+              <div
+                className="verif-row"
+                key={item.id ?? item.code ?? index}
                 style={{
-                  color: getStatusColor(
-                    item.status
-                  ),
-                  fontWeight: 'bold',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '3px 8px',
+                  fontSize: '7.5px',
+                  borderBottom:
+                    '1px solid rgba(30,41,59,0.6)',
                 }}
               >
-                {getStatusIcon(
-                  item.status
-                )}{' '}
-                {item.status || 'Unknown'}
-              </span>
-            </div>
-          ))
+                <span className="verif-name">
+                  {item.name ||
+                    item.type ||
+                    item.incident_id ||
+                    'Unknown'}
+                </span>
+
+                <span
+                  className="verif-status"
+                  style={{
+                    color: getStatusColor(status),
+                    fontWeight: 'bold',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {getStatusIcon(status)} {status}
+                </span>
+              </div>
+            );
+          })
         ) : (
           <div
             style={{
