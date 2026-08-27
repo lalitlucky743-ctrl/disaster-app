@@ -17,7 +17,7 @@ import MapArea from './components/MapArea';
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL?.replace(/\/+$/, '') ||
-  'https://disaster-app-30ll.onrender.com';
+  'https://disaster-app-uhi7.onrender.com';
 
 
 // ============================================================

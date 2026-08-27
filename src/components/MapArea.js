@@ -15,7 +15,7 @@ import 'leaflet/dist/leaflet.css';
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  'https://disaster-app-30ll.onrender.com';
+  'https://disaster-app-uhi7.onrender.com';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
