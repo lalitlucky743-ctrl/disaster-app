@@ -414,14 +414,13 @@ ALLOWED_ORIGINS = [
     "http://localhost:5174",
     "http://localhost:5175",
     "http://localhost:5176",
+    "https://disaster-app-drab.vercel.app",
 ]
 
 app.add_middleware(
     CORSMiddleware,
 
     allow_origins=ALLOWED_ORIGINS,
-
-    allow_origin_regex=r"https://.*\.vercel\.app",
 
     allow_credentials=True,
 
@@ -636,7 +635,7 @@ def root():
 # HEALTH
 # ============================================================
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
 
     return {
