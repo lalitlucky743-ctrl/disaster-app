@@ -620,7 +620,7 @@ class TeamLocationUpdate(BaseModel):
 # ROOT
 # ============================================================
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
 
     return {
@@ -637,6 +637,15 @@ def root():
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
+
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@app.api_route("/api/health", methods=["GET", "HEAD"])
+def api_health():
 
     return {
         "status": "healthy",
